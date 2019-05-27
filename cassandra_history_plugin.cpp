@@ -29,6 +29,7 @@
 #include <tuple>
 #include <type_traits>
 #include <vector>
+#include <atomic>
 
 #include "cassandra_client.h"
 #include "ThreadPool/ThreadPool.h"
@@ -575,7 +576,7 @@ void cassandra_history_plugin_impl::process_applied_transaction(chain::transacti
          }
       );
    }
-   
+
    if( action_traces.empty() ) return;
 
    auto block_time = t->block_time;
@@ -746,7 +747,7 @@ void cassandra_history_plugin_impl::upsertAccount(
 {
    if (act.account != chain::config::system_account_name)
       return;
-   
+
    try {
       if( act.name == chain::newaccount::get_name() ) {
          auto newacc = act.data_as<chain::newaccount>();
@@ -866,7 +867,7 @@ void cassandra_history_plugin::plugin_initialize(const variables_map& options) {
             fc::remove_all( app().data_dir() / "cass_shard" );
             fc::remove_all( app().data_dir() / "cass_failed" );
          }
-         
+
          std::string url_str = options.at( "cassandra-url" ).as<std::string>();
          std::string keyspace_str = options.at( "cassandra-keyspace" ).as<std::string>();
          size_t replication_factor = options.at( "cassandra-replication-factor" ).as<size_t>();
@@ -893,7 +894,7 @@ void cassandra_history_plugin::plugin_initialize(const variables_map& options) {
          EOS_ASSERT(my->chain_plug, chain::missing_chain_plugin_exception, "");
          auto& chain = my->chain_plug->chain();
          my->chain_id.emplace( chain.get_chain_id());
-         
+
          my->accepted_block_connection.emplace(
             chain.accepted_block.connect( [&]( const chain::block_state_ptr& bs ) {
                my->on_accepted_block( bs );
