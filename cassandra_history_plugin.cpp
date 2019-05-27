@@ -137,8 +137,8 @@ class cassandra_history_plugin_impl {
    boost::mutex upsert_account_task_mtx;
 
    chain_plugin* chain_plug = nullptr;
-   boost::atomic<bool> done{false};
-   boost::atomic<bool> startup{true};
+   std::atomic_bool<bool> done{false};
+   std::atomic_bool<bool> startup{true};
    fc::optional<chain::chain_id_type> chain_id;
    fc::microseconds abi_serializer_max_time_ms;
 
