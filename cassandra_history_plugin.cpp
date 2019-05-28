@@ -271,7 +271,7 @@ void cassandra_history_plugin_impl::consume_blocks() {
 
    try {
       while (true) {
-         std::mutex::scoped_lock lock(queue_mtx);
+         std::unique_lock<std::mutex> lock(queue_mtx);
          while ( transaction_metadata_queue.empty() &&
                  transaction_trace_queue.empty() &&
                  block_state_queue.empty() &&
@@ -356,7 +356,7 @@ void cassandra_history_plugin_impl::consume_blocks() {
 
 template<typename Queue, typename Entry>
 void cassandra_history_plugin_impl::queue( Queue& queue, const Entry& e ) {
-   std::mutex::scoped_lock lock( queue_mtx );
+   std::unique_lock<std::mutex> lock(queue_mtx);
    auto queue_size = queue.size();
    if( queue_size > max_queue_size ) {
       lock.unlock();
@@ -562,19 +562,17 @@ void cassandra_history_plugin_impl::process_applied_transaction(chain::transacti
          }
       };
       {
-         std::mutex::scoped_lock guard(upsert_account_task_mtx);
+         std::unique_lock<std::mutex> guard(upsert_account_task_mtx);
          upsert_account_task_queue.emplace( std::move(f) );
       }
       check_task_queue_size();
       thread_pool->enqueue(
-         [ this ]()
-         {
-            std::mutex::scoped_lock guard(upsert_account_task_mtx);
-            std::function<void()> task = std::move( upsert_account_task_queue.front() );
-            task();
-            upsert_account_task_queue.pop();
-         }
-      );
+          [this]() {
+             std::unique_lock<std::mutex> guard(upsert_account_task_mtx);
+             std::function<void()> task = std::move(upsert_account_task_queue.front());
+             task();
+             upsert_account_task_queue.pop();
+          });
    }
 
    if( action_traces.empty() ) return;
