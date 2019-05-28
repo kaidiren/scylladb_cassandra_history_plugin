@@ -122,9 +122,9 @@ class cassandra_history_plugin_impl {
    std::set<filter_entry> filter_out;
 
    template<typename Queue, typename Entry> void queue(Queue& queue, const Entry& e);
-   boost::mutex queue_mtx;
-   boost::condition_variable condition;
-   boost::thread consume_thread;
+   std::mutex queue_mtx;
+   std::condition_variable condition;
+   std::thread consume_thread;
 
    size_t max_queue_size = 0;
    int queue_sleep_time = 0;
@@ -134,7 +134,7 @@ class cassandra_history_plugin_impl {
    std::deque<chain::block_state_ptr> irreversible_block_state_queue;
 
    std::queue<std::function<void()>> upsert_account_task_queue;
-   boost::mutex upsert_account_task_mtx;
+   std::mutex upsert_account_task_mtx;
 
    chain_plugin* chain_plug = nullptr;
    std::atomic_bool done{false};
@@ -244,7 +244,7 @@ cassandra_history_plugin_impl::~cassandra_history_plugin_impl()
 
 void cassandra_history_plugin_impl::init() {
    ilog("starting consume thread");
-   consume_thread = boost::thread([this] { consume_blocks(); });
+   consume_thread = std::thread([this] { consume_blocks(); });
 
    startup = false;
 }
@@ -256,7 +256,7 @@ void cassandra_history_plugin_impl::check_task_queue_size() {
       task_queue_sleep_time += 10;
       if( task_queue_sleep_time > 1000 )
          wlog("thread pool task queue size: ${q}", ("q", task_queue_size));
-      boost::this_thread::sleep_for( boost::chrono::milliseconds( task_queue_sleep_time ));
+      std::this_thread::sleep_for( std::chrono::milliseconds( task_queue_sleep_time ));
    } else {
       task_queue_sleep_time -= 10;
       if( task_queue_sleep_time < 0 ) task_queue_sleep_time = 0;
@@ -271,7 +271,7 @@ void cassandra_history_plugin_impl::consume_blocks() {
 
    try {
       while (true) {
-         boost::mutex::scoped_lock lock(queue_mtx);
+         std::mutex::scoped_lock lock(queue_mtx);
          while ( transaction_metadata_queue.empty() &&
                  transaction_trace_queue.empty() &&
                  block_state_queue.empty() &&
@@ -356,7 +356,7 @@ void cassandra_history_plugin_impl::consume_blocks() {
 
 template<typename Queue, typename Entry>
 void cassandra_history_plugin_impl::queue( Queue& queue, const Entry& e ) {
-   boost::mutex::scoped_lock lock( queue_mtx );
+   std::mutex::scoped_lock lock( queue_mtx );
    auto queue_size = queue.size();
    if( queue_size > max_queue_size ) {
       lock.unlock();
@@ -364,7 +364,7 @@ void cassandra_history_plugin_impl::queue( Queue& queue, const Entry& e ) {
       queue_sleep_time += 10;
       if( queue_sleep_time > 1000 )
          wlog("queue size: ${q}", ("q", queue_size));
-      boost::this_thread::sleep_for( boost::chrono::milliseconds( queue_sleep_time ));
+      std::this_thread::sleep_for( std::chrono::milliseconds( queue_sleep_time ));
       lock.lock();
    } else {
       queue_sleep_time -= 10;
@@ -562,14 +562,14 @@ void cassandra_history_plugin_impl::process_applied_transaction(chain::transacti
          }
       };
       {
-         boost::mutex::scoped_lock guard(upsert_account_task_mtx);
+         std::mutex::scoped_lock guard(upsert_account_task_mtx);
          upsert_account_task_queue.emplace( std::move(f) );
       }
       check_task_queue_size();
       thread_pool->enqueue(
          [ this ]()
          {
-            boost::mutex::scoped_lock guard(upsert_account_task_mtx);
+            std::mutex::scoped_lock guard(upsert_account_task_mtx);
             std::function<void()> task = std::move( upsert_account_task_queue.front() );
             task();
             upsert_account_task_queue.pop();
